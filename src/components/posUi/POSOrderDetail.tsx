@@ -31,23 +31,33 @@ type Payment = {
 type Order = {
   id?: string;
   orderNumber?: string;
+
   customer?: {
     name?: string;
   };
+
   customerName?: string;
+
   orderType?: string;
   tableNumber?: string | number;
   status?: string;
   paymentStatus?: string;
   createdAt?: string;
+
   orderItems?: OrderItem[];
   items?: OrderItem[];
+
   note?: string;
+
   subtotal?: number;
-  tax?: number;
-  serviceCharge?: number;
+
+  // Discount
   discountMember?: number;
+  discount?: number;
+  discountAmount?: number;
+
   totalPrice?: number;
+
   payment?: Payment;
 };
 
@@ -56,6 +66,7 @@ type StatusHistory = {
   status?: string;
   changedAt?: string;
   note?: string;
+
   changedBy?: {
     name?: string;
     role?: string;
@@ -106,40 +117,58 @@ const ORDER_TYPE_LABEL: Record<string, string> = {
 };
 
 const PAYMENT_METHODS = [
-  { value: "CASH", label: "Cash" },
-  { value: "QRIS", label: "QRIS" },
-  { value: "TRANSFER", label: "Transfer" },
+  {
+    value: "CASH",
+    label: "Cash",
+  },
+  {
+    value: "QRIS",
+    label: "QRIS",
+  },
+  {
+    value: "TRANSFER",
+    label: "Transfer",
+  },
 ];
 
 const STATUS_STYLE: Record<
   string,
-  { bg: string; text: string; border: string }
+  {
+    bg: string;
+    text: string;
+    border: string;
+  }
 > = {
   PENDING: {
     bg: "bg-yellow-500/10",
     text: "text-yellow-400",
     border: "border-yellow-500/20",
   },
+
   PREPARING: {
     bg: "bg-blue-500/10",
     text: "text-blue-400",
     border: "border-blue-500/20",
   },
+
   READY: {
     bg: "bg-violet-500/10",
     text: "text-violet-400",
     border: "border-violet-500/20",
   },
+
   SERVED: {
     bg: "bg-cyan-500/10",
     text: "text-cyan-400",
     border: "border-cyan-500/20",
   },
+
   COMPLETED: {
     bg: "bg-green-500/10",
     text: "text-green-400",
     border: "border-green-500/20",
   },
+
   CANCELLED: {
     bg: "bg-red-500/10",
     text: "text-red-400",
@@ -152,7 +181,9 @@ const formatDate = (date?: string) => {
 
   const value = new Date(date);
 
-  if (Number.isNaN(value.getTime())) return "-";
+  if (Number.isNaN(value.getTime())) {
+    return "-";
+  }
 
   return value.toLocaleDateString("id-ID", {
     day: "2-digit",
@@ -166,7 +197,9 @@ const formatTime = (date?: string) => {
 
   const value = new Date(date);
 
-  if (Number.isNaN(value.getTime())) return "-";
+  if (Number.isNaN(value.getTime())) {
+    return "-";
+  }
 
   return value.toLocaleTimeString("id-ID", {
     hour: "2-digit",
@@ -190,15 +223,19 @@ export default function POSOrderDetail({
   onOrderUpdated,
 }: Props) {
   const [newStatus, setNewStatus] = useState(STATUS_PENDING);
+
   const [statusHistory, setStatusHistory] = useState<StatusHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [paymentAmount, setPaymentAmount] = useState("");
+
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentMessage, setPaymentMessage] = useState("");
+
   const [showInvoice, setShowInvoice] = useState(false);
 
   useEffect(() => {
@@ -235,6 +272,7 @@ export default function POSOrderDetail({
       setStatusHistory(Array.isArray(data) ? data : []);
     } catch (error) {
       console.log("FETCH HISTORY ERROR:", error);
+
       setStatusHistory([]);
     } finally {
       setLoadingHistory(false);
@@ -248,6 +286,7 @@ export default function POSOrderDetail({
 
     if (newStatus === currentStatus) {
       setStatusMessage("Status belum berubah.");
+
       return;
     }
 
@@ -277,6 +316,7 @@ export default function POSOrderDetail({
       };
 
       setNewStatus(updatedStatus);
+
       onOrderUpdated?.(updatedData);
 
       setStatusMessage("Status pesanan berhasil diperbarui.");
@@ -298,10 +338,12 @@ export default function POSOrderDetail({
     if (!order?.id) return;
 
     const amount = Number(paymentAmount);
-    const total = Number(order.totalPrice || 0);
+
+    const total = Number(totalPrice);
 
     if (!amount || amount <= 0) {
       setPaymentMessage("Masukkan jumlah pembayaran.");
+
       return;
     }
 
@@ -309,6 +351,7 @@ export default function POSOrderDetail({
       setPaymentMessage(
         `Pembayaran kurang. Total tagihan ${formatRupiah(total)}.`,
       );
+
       return;
     }
 
@@ -334,7 +377,9 @@ export default function POSOrderDetail({
 
       const updatedData: Order = {
         ...order,
+
         paymentStatus: STATUS_PAID,
+
         payment: payment || {
           method: paymentMethod,
           payAmount: amount,
@@ -343,6 +388,7 @@ export default function POSOrderDetail({
       };
 
       setPaymentAmount("");
+
       setPaymentMessage("Pembayaran berhasil dicatat.");
 
       onOrderUpdated?.(updatedData);
@@ -376,6 +422,14 @@ export default function POSOrderDetail({
 
   const orderItems = order.orderItems || order.items || [];
 
+  /**
+   * SUBTOTAL
+   *
+   * Kalau backend mengirim subtotal,
+   * gunakan subtotal tersebut.
+   *
+   * Kalau tidak ada, hitung dari item.
+   */
   const subtotal = Number(
     order.subtotal ??
       orderItems.reduce(
@@ -385,14 +439,28 @@ export default function POSOrderDetail({
       ),
   );
 
-  const tax = Number(order.tax || 0);
-  const serviceCharge = Number(order.serviceCharge || 0);
-  const discountMember = Number(order.discountMember || 0);
-
-  const totalPrice = Number(
-    order.totalPrice ||
-      Math.max(0, subtotal + tax + serviceCharge - discountMember),
+  /**
+   * DISCOUNT
+   *
+   * Prioritas:
+   * 1. discountMember
+   * 2. discountAmount
+   * 3. discount
+   */
+  const discountMember = Math.max(
+    0,
+    Number(order.discountMember ?? order.discountAmount ?? order.discount ?? 0),
   );
+
+  /**
+   * TOTAL
+   *
+   * Tax dan Service Charge sudah
+   * tidak digunakan.
+   *
+   * Total = Subtotal - Discount
+   */
+  const totalPrice = Math.max(0, subtotal - discountMember);
 
   const payment = order.payment;
 
@@ -405,6 +473,8 @@ export default function POSOrderDetail({
     >
       <View className="flex-1 bg-black/60">
         <View className="mt-auto max-h-[95%] rounded-t-[28px] bg-[#071A33]">
+          {/* HEADER */}
+
           <View className="flex-row items-start justify-between border-b border-white/10 px-5 py-5">
             <View className="flex-1">
               <Text className="text-[10px] font-bold uppercase tracking-[2px] text-[#4DB5FF]">
@@ -436,7 +506,7 @@ export default function POSOrderDetail({
               paddingBottom: 35,
             }}
           >
-            {/* Informasi order */}
+            {/* INFORMASI ORDER */}
 
             <View className="px-5 pt-5">
               <View className="flex-row gap-2">
@@ -496,7 +566,7 @@ export default function POSOrderDetail({
               </View>
             </View>
 
-            {/* Perubahan status */}
+            {/* PERUBAHAN STATUS */}
 
             <View className="mx-5 mt-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4">
               <Text className="text-xs font-bold text-blue-400">
@@ -565,7 +635,7 @@ export default function POSOrderDetail({
               )}
             </View>
 
-            {/* Item pesanan */}
+            {/* ITEM PESANAN */}
 
             <View className="px-5 pt-6">
               <Text className="mb-3 text-base font-extrabold text-white">
@@ -630,7 +700,7 @@ export default function POSOrderDetail({
               </View>
             </View>
 
-            {/* Catatan */}
+            {/* CATATAN */}
 
             {!!order.note && (
               <View className="mx-5 mt-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4">
@@ -644,7 +714,7 @@ export default function POSOrderDetail({
               </View>
             )}
 
-            {/* Pembayaran */}
+            {/* PEMBAYARAN */}
 
             <View className="px-5 pt-6">
               <Text className="mb-3 text-base font-extrabold text-white">
@@ -731,6 +801,7 @@ export default function POSOrderDetail({
                       value={paymentAmount}
                       onChangeText={(value) => {
                         setPaymentAmount(value.replace(/[^0-9]/g, ""));
+
                         setPaymentMessage("");
                       }}
                       keyboardType="numeric"
@@ -820,7 +891,7 @@ export default function POSOrderDetail({
               </View>
             </View>
 
-            {/* Status history */}
+            {/* STATUS HISTORY */}
 
             <View className="px-5 pt-6">
               <View className="mb-3 flex-row items-end justify-between">
@@ -939,9 +1010,11 @@ export default function POSOrderDetail({
               </View>
             </View>
 
-            {/* Total */}
+            {/* TOTAL */}
 
             <View className="mx-5 mt-6 border-t border-white/10 pt-5">
+              {/* SUBTOTAL */}
+
               <View className="flex-row justify-between">
                 <Text className="text-sm text-white/50">Subtotal</Text>
 
@@ -950,21 +1023,7 @@ export default function POSOrderDetail({
                 </Text>
               </View>
 
-              <View className="mt-3 flex-row justify-between">
-                <Text className="text-sm text-white/50">Tax</Text>
-
-                <Text className="text-sm font-semibold text-white/80">
-                  {formatRupiah(tax)}
-                </Text>
-              </View>
-
-              <View className="mt-3 flex-row justify-between">
-                <Text className="text-sm text-white/50">Service Charge</Text>
-
-                <Text className="text-sm font-semibold text-white/80">
-                  {formatRupiah(serviceCharge)}
-                </Text>
-              </View>
+              {/* DISCOUNT */}
 
               <View className="mt-3 flex-row justify-between">
                 <Text className="text-sm text-white/50">Discount Member</Text>
@@ -976,6 +1035,8 @@ export default function POSOrderDetail({
                 </Text>
               </View>
 
+              {/* TOTAL */}
+
               <View className="mt-4 flex-row items-center justify-between border-t border-white/10 pt-4">
                 <Text className="text-base font-extrabold text-white">
                   Total
@@ -986,6 +1047,8 @@ export default function POSOrderDetail({
                 </Text>
               </View>
             </View>
+
+            {/* TUTUP */}
 
             <View className="px-5 pt-6">
               <Pressable
@@ -999,7 +1062,7 @@ export default function POSOrderDetail({
         </View>
       </View>
 
-      {/* Invoice */}
+      {/* INVOICE */}
 
       <Modal
         visible={showInvoice}
@@ -1009,6 +1072,8 @@ export default function POSOrderDetail({
       >
         <View className="flex-1 items-center justify-center bg-black/70 px-5">
           <View className="max-h-[85%] w-full rounded-3xl bg-white">
+            {/* INVOICE HEADER */}
+
             <View className="flex-row items-center justify-between border-b border-slate-100 p-5">
               <View>
                 <Text className="text-lg font-extrabold text-slate-900">
@@ -1034,6 +1099,8 @@ export default function POSOrderDetail({
                 padding: 20,
               }}
             >
+              {/* RESTORAN */}
+
               <View className="items-center border-b border-dashed border-slate-200 pb-5">
                 <Text className="text-xl font-extrabold text-slate-900">
                   RESTORAN
@@ -1043,6 +1110,8 @@ export default function POSOrderDetail({
                   INVOICE PEMBAYARAN
                 </Text>
               </View>
+
+              {/* INFO */}
 
               <View className="py-5">
                 <View className="flex-row justify-between">
@@ -1061,6 +1130,8 @@ export default function POSOrderDetail({
                   </Text>
                 </View>
               </View>
+
+              {/* ITEM */}
 
               <View className="border-y border-slate-100 py-4">
                 {orderItems.map((item, index) => {
@@ -1095,6 +1166,8 @@ export default function POSOrderDetail({
                 })}
               </View>
 
+              {/* TOTAL INVOICE */}
+
               <View className="pt-4">
                 <View className="flex-row justify-between">
                   <Text className="text-xs text-slate-400">Subtotal</Text>
@@ -1124,6 +1197,8 @@ export default function POSOrderDetail({
                   </Text>
                 </View>
               </View>
+
+              {/* PAYMENT */}
 
               {!!payment && (
                 <View className="mt-5 rounded-2xl bg-slate-50 p-4">
